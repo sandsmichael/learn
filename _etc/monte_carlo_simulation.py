@@ -3,8 +3,9 @@ import math
 import matplotlib.pyplot as plt
 import numpy as np
 import yfinance as yf
+from scipy.stats import norm
 
-data =  yf.download("AMZN", start="2021-01-01", end="2022-10-30")
+data =  yf.download("JNJ", start="2021-01-01", end="2022-10-30")
 
 data.head()
 
@@ -33,18 +34,28 @@ print ("cagr (mean returns) : ", str(round(cagr,4)))
 print ("std_dev (standard deviation of return : )", str(round(std_dev,4)))
 
 
+# for understanding indput data being provided
+print( data['Adj Close'].pct_change())
+normal_distribution = norm(cagr, std_dev)
+x = np.linspace(start =-1, stop = 1, num = 1000)
+fig, ax = plt.subplots(1, 1)
+ax.plot(x, normal_distribution.pdf(x), 'k-', lw=2, label='frozen pdf')
+plt.show()
+print(norm.ppf(0.95, loc=0, scale=1))
+
+
 def simulate(data, col=None):
 
     number_of_trials = 100
 
     closing_prices = []
     for i in range(number_of_trials):
-        #Generate random values for 1 year's worth of trading (252 days), using numpy and assuming a normal distribution
+        #Generate random values for 1 year's worth of trading (252 days), using numpy and assuming a normal distribution with mean of dialy growth rate and standard dev of daily standard deviation of percent change in price
         daily_return_percentages = np.random.normal(cagr/number_of_trading_days, std_dev/math.sqrt(number_of_trading_days), number_of_trading_days)+1
         # print(daily_return_percentages)
         #Now that we have created a random series of future daily return %s, we can simply apply these forward-looking to our last stock price in the window, effectively carrying forward  a price prediction for the next year
         #This distribution is known as a 'random walk'
-        price_series = [data[col][-1]]
+        price_series = [data[col][-1]] # the last actual value provided in our input data
         for j in daily_return_percentages:
             price_series.append(price_series[-1] * j)
 
@@ -79,8 +90,11 @@ def simulate(data, col=None):
     plt.axvline(data['Adj Close'][-1],color='g', linestyle='dashed',linewidth=2)
     plt.show()
 
+
+
 simulate(data = data, col = 'Adj Close')
 
 
 
 
+#TODO make matplotlib panel figure with histogram and simulation line plots
