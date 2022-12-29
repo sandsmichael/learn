@@ -1,6 +1,5 @@
 """ 
   ┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
-  │ 
                                                                                                                 │
   │ # A monte carlo simulation on daily equity returns used to predict future price level
                            │
@@ -19,6 +18,8 @@ import pandas_market_calendars as mcal
 import datetime
 import matplotlib.dates as mdates
 
+import warnings
+warnings.filterwarnings('ignore')
 
 """ 
   ┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
@@ -58,7 +59,7 @@ class NormalDistribution:
         
         self.data = data
         self.col = col
-        self.number_of_trading_days = 252 # number of trading days in a year
+        self.number_of_trading_days = 252 
 
         self.get_periods()
         self.get_growth()
@@ -73,11 +74,10 @@ class NormalDistribution:
 
     def get_growth(self):
         total_growth = (self.data[self.col][-1] / self.data[self.col][1])
-        self.cagr = total_growth ** (1/self.n_years) - 1 # mean annual growth rate; raise the total growth to the inverse of the # of years (e.g. ~1/10) to annualize our growth rate
+        self.cagr = total_growth ** (1/self.n_years) - 1 # mean annual growth rate; raise the total growth to the inverse of the # of years (e.g. ~1/10) to annualize growth rate
 
     def get_std_dev(self):
-        # calculate the standard deviation of the daily price changes
-        self.std_dev = self.data[self.col].pct_change().std()
+        self.std_dev = self.data[self.col].pct_change().std()         # calculate the standard deviation of the daily price changes
         self.std_dev = self.std_dev * math.sqrt(self.number_of_trading_days) # scale std_dev by an annualization factor reference: https://www.fool.com/knowledge-center/how-to-calculate-annualized-volatility.aspx
 
     def serialize(self):
@@ -85,26 +85,24 @@ class NormalDistribution:
             'cagr':self.cagr,
             'std_dev':self.std_dev,
             'days':self.n_days,
+            'years':self.n_years
         })
 
 
     @staticmethod
-    def distribution_over_time(ax):
-        data1 =  yf.download("AMZN", start="2020-01-01", end="2020-12-31")
-        data2 =  yf.download("AMZN", start="2021-01-01", end="2021-12-31")
-        data3 =  yf.download("AMZN", start="2022-01-01", end="2022-12-25")
+    def periodic_distribution_chart(ax):
+        data1 =  yf.download(TICKER, start="2020-01-01", end="2020-12-31", progress = False)
+        data2 =  yf.download(TICKER, start="2021-01-01", end="2021-12-31", progress = False)
+        data3 =  yf.download(TICKER, start="2022-01-01", end="2022-12-31", progress = False)
         x = data1['Adj Close'].to_frame().pct_change().rename(columns = {'Adj Close':'2020'}).merge(
             data2['Adj Close'].to_frame().pct_change().rename(columns = {'Adj Close':'2021'}), how = 'outer', left_index = True, right_index = True
         ).merge(
             data3['Adj Close'].to_frame().pct_change().rename(columns = {'Adj Close':'2022'}), how = 'outer', left_index = True, right_index = True
         )
-        print(x)
         for c in x.columns:
-            sns.distplot(x[c], hist = False, kde = True, 
-                            kde_kws = {'linewidth': 3},
-                            label = c, ax = ax)
+            sns.distplot(x[c], hist = False, kde = True,  kde_kws = {'linewidth': 3}, label = c, ax = ax)
         # Plot formatting
-        ax.legend(prop={'size': 13}, title = 'Year')
+        ax.legend( title = 'Year') # prop={'size': 13},
         plt.title('Density Plot of Annual Returns')
         ax.set_xlabel('Percent Change')
         ax.set_ylabel('Density')
@@ -112,32 +110,20 @@ class NormalDistribution:
 
 
     @staticmethod
-    def normal_distribution_plot(ax1):
-        # for understanding indput data being provided
-        mu, sigma = dist.cagr/dist.number_of_trading_days, dist.std_dev/math.sqrt(dist.number_of_trading_days)
+    def normal_distribution_pdf_and_hist_chart(ax1):
+        mu, sigma = dist.cagr/dist.number_of_trading_days, dist.std_dev/math.sqrt(dist.number_of_trading_days) # unannualize cagr to get average daily percent change; unnanualize the std dev that was previously annualized above
         s = np.random.normal(mu, sigma, len(dist.data[dist.col]))
-        counts, bins, ignored = ax1.hist(dist.data[dist.col].pct_change(), density = True, bins = 40) # norm=True thus returns a histogram which can be interpreted as a probability distribution.
-        ax1.plot(bins, 1/(sigma * np.sqrt(2 * np.pi)) *np.exp( - (bins - mu)**2 / (2 * sigma**2) ),       linewidth=3, color='y')
-        ax1.set_title(f'Distribution of Returns', fontsize='13')
-        ax1.set_xlabel('Daily Percent Change', fontsize='13')
-        ax1.set_ylabel('Density', fontsize='13')
-        ax1.axvline(0, c='black')
-        ax1.axvline(dist.cagr/dist.number_of_trading_days, c='orange')
-        # Label the raw counts and the percentages below the x-axis
-        # bin_centers = 0.5 * np.diff(bins) + bins[:-1]
-        # for count, x in zip(counts, bin_centers):
-        #     # Label the raw counts
-        #     axs[0, 0].annotate('{:.0f}'.format(count), xy=(x, 0), xycoords=('data', 'axes fraction'),
-        #         xytext=(0, 18), textcoords='offset points', va='top', ha='center')
-        ax1.annotate(f'Mean: {round(mu,4)}', xy=(0.10, 0.85), xycoords=('data', 'axes fraction'),xytext=(0, 18), textcoords='offset points', va='top', ha='center')
-        ax1.annotate(f'Std Dev: {round(dist.std_dev,4)}', xy=(0.10, 0.80), xycoords=('data', 'axes fraction'),xytext=(0, 18), textcoords='offset points', va='top', ha='center')
+        counts, bins, ignored = ax1.hist(dist.data[dist.col].pct_change(), density = True, bins = 40, label = 'Normalized bins') # norm=True thus returns a histogram which can be interpreted as a probability distribution.
+        ax1.plot(bins, 1/(sigma * np.sqrt(2 * np.pi)) *np.exp( - (bins - mu)**2 / (2 * sigma**2) ),  linewidth=3, color='y', label = 'PDF')
+        ax1.set_title(f'Distribution of Returns') 
+        ax1.set_xlabel('Daily Percent Change')
+        ax1.set_ylabel('Density')
+        ax1.axvline(0, c='black', label = 'Zero')
+        ax1.axvline(dist.cagr/dist.number_of_trading_days, c='lightgreen', label = 'Mean')
+        ax1.annotate(f'Mean: {round(mu,4) *100}%', xy=(0.03, 0.85), xycoords=('data', 'axes fraction'),xytext=(0, 18), textcoords='offset points', va='top', ha='center')
+        ax1.annotate(f'Std Dev: {round(dist.std_dev,4)}', xy=(0.03, 0.80), xycoords=('data', 'axes fraction'),xytext=(0, 18), textcoords='offset points', va='top', ha='center')
+        ax1.legend()
 
-        # seaborn density plot
-        # Density Plot and Histogram of all arrival delays
-        # sns.distplot(dist.data[dist.col].pct_change(), hist=True, kde=True, 
-        #             bins=20, color = 'darkblue', 
-        #             hist_kws={'edgecolor':'black'},
-        #             kde_kws={'linewidth': 4}, ax = axs[1, 0])
 
 
 class MonteCarlo:
@@ -147,8 +133,10 @@ class MonteCarlo:
 
     @classmethod
     def random_walk(self, dist:NormalDistribution, number_of_trials=100):
-        #Generate random values for 1 year's worth of trading (252 days), using numpy and assuming a normal distribution with mean of dialy growth rate and standard dev of daily standard deviation of percent change in price
-        #Now that we have created a random series of future daily return %s, we can simply apply these forward-looking to our last stock price in the window, effectively carrying forward  a price prediction for the next year
+        '''
+        Generate random values for 1 year's worth of trading (252 days), using numpy and assuming a normal distribution with mean of dialy growth rate and standard dev of daily standard deviation of percent change in price
+        Now that we have created a random series of future daily return %s, we can simply apply these forward-looking to our last stock price in the window, effectively carrying forward  a price prediction for the next year
+        '''
         closing_prices = []
         simulation_prices = []
         for i in range(number_of_trials):
@@ -169,7 +157,7 @@ class MonteCarlo:
         self.mean_end_price = round(np.mean(self.closing_prices),2)
 
     
-    def monte_carlo_line(self, ax2):
+    def simulation_time_series(self, ax2):
         nyse = mcal.get_calendar('NYSE')
         # get historical prices (actuals)
         history = dist.data[[dist.col]].reset_index()
@@ -180,81 +168,62 @@ class MonteCarlo:
         date_range = nyse.valid_days(start_date=dist.data.reset_index()['Date'].iloc[-1], end_date= '2030-01-01')[1:len(self.simulation_prices)+1]
         future['Date'] = date_range
         future['Date'] = future['Date'].dt.date
-        print(future)
         future.set_index('Date', inplace = True)
         self.simulation_prices = history.merge(future, how = 'outer', left_index = True, right_index = True)
         ax2.plot(self.simulation_prices)
-
         ax2.set_title('Monte Carlo Simulation')
         ax2.set_xlabel('Date')
         ax2.set_ylabel('Equity Price')
-        ax2.annotate(f'Mean Ending: {round(self.mean_end_price,4)}', xy=(mdates.date2num(pd.to_datetime('2022-01-01')), 50))
+        ax2.annotate(f'Last Actual: {round(history.iloc[-1].values[0],4)}', xy=(mdates.date2num(pd.to_datetime('2022-01-01')), history.iloc[-1].values[0]+(0.4 * history.iloc[-1].values[0])))
+        ax2.annotate(f'Mean Ending: {round(self.mean_end_price,4)}', xy=(mdates.date2num(pd.to_datetime('2022-01-01')), history.iloc[-1].values[0]+(0.2 * history.iloc[-1].values[0])))
 
 
-
-    def simulation_results(self, ax):
-        # #from here, we can check the mean of all ending prices allowing us to arrive at the most probable ending point
-        ax.axvline(self.mean_end_price,color='black', linewidth=2)
-        #lastly, we can split the distribution into percentiles to help us gauge risk vs. reward
-        #Pull top 10% of possible outcomes
+    def simulation_results_histogram(self, ax):
         top_ten = np.percentile(self.closing_prices,100-10)
-        #Pull bottom 10% of possible outcomes
         bottom_ten = np.percentile(self.closing_prices,10)
-        #create histogram again
-        ax.hist(self.closing_prices,bins=40)
-        #append w/ top 10% line
-        ax.axvline(top_ten,color='r',linestyle='dashed',linewidth=2)
-        #append w/ bottom 10% line
-        ax.axvline(bottom_ten,color='r',linestyle='dashed',linewidth=2)
-        #ax2 with current price
-        ax.axvline(dist.data[dist.col][-1],color='yellow', linestyle='dashed',linewidth=2)
-        
-        ax.set_title('Simulation Results')
+        counts, bins, ignored = ax.hist(self.closing_prices,bins=40, label = 'Frequency bins')
+        ax.axvline(top_ten,color='r',linestyle='dashed',linewidth=2, label ='Top 10%')
+        ax.axvline(bottom_ten,color='r',linestyle='dashed',linewidth=2, label ='Bottom 10%')
+        ax.axvline(dist.data[dist.col][-1],color='lightgreen', linestyle='dashed',linewidth=2, label ='Actual')
+        ax.axvline(self.mean_end_price,color='black', linewidth=2, label ='Mean')
+        ax.set_title('Simulation Results - Ending Prices')
         ax.set_xlabel('Equity Price')
         ax.set_ylabel('Frequency')
+        ax.legend(loc = 'best')
+        # Label the raw counts and the percentages below the x-axis
+        bin_centers = 0.5 * np.diff(bins) + bins[:-1]
+        for count, x in zip(counts, bin_centers):
+            # Label the raw counts
+            ax.annotate('{:.0f}'.format(count), xy=(x, 0), xycoords=('data', 'axes fraction'),
+                xytext=(0, 18), textcoords='offset points', va='top', ha='center')
 
 
-    # @classmethod
     def plot(self, dist:NormalDistribution):
-        
         # fig, axs = plt.subplots(3,2, figsize=(15, 10))
-        # fig.suptitle('Title')
-
-        fig = plt.figure(constrained_layout=True) # https://matplotlib.org/stable/gallery/subplots_axes_and_figures/gridspec_multicolumn.html
+        
+        fig = plt.figure(figsize=(15, 10), constrained_layout=True) # https://matplotlib.org/stable/gallery/subplots_axes_and_figures/gridspec_multicolumn.html
         gs = GridSpec(3, 3, figure=fig)
         ax1 = fig.add_subplot(gs[0, : -1])        
         ax2 = fig.add_subplot(gs[1, :-1])
         ax3 = fig.add_subplot(gs[2, :-1])
         ax5 = fig.add_subplot(gs[2:, -1])
         ax4 = fig.add_subplot(gs[:2, -1])
+        fig.suptitle(f'{TICKER} Returns - From {START_DATE} To {END_DATE}')
 
+        dist.normal_distribution_pdf_and_hist_chart(ax1)
+        self.simulation_time_series(ax2)
+        self.simulation_results_histogram(ax3)
+        dist.periodic_distribution_chart(ax4)
 
-        ax1 = dist.normal_distribution_plot(ax1)
-
-        ax2 = self.monte_carlo_line(ax2)
-
-        self.simulation_results(ax3)
-
-        ax4 = dist.distribution_over_time(ax4)
-
-
-        print(self.simulation_prices)
-        simulation_description = self.simulation_prices.drop('Adj Close', axis=1).dropna(how = 'any', axis=0).describe() # drop Date column?
-
-        results_description = simulation_description.T[['mean', '50%']].describe().round(2).reset_index()
+        results_description = self.simulation_prices.drop('Adj Close', axis=1).dropna(how = 'any', axis=0).iloc[-1].describe().round(2).reset_index() 
         fig, ax5 = render_mpl_table(results_description, header_columns=0, col_width=2.0, ax=ax5)
         ax5.set_title('Summary of Simulation Results')
-        fig.savefig("table_mpl.png")
-
         # plt.tight_layout()
         # plt.subplots_adjust(left=None, bottom=None, right=None, top=None, wspace=None, hspace=None)
-        plt.savefig('monte_carlo_figure.png')
+        plt.savefig('./img/monte_carlo_figure.png', bbox_inches = 'tight')
         plt.show()
 
-
-
-
-
+        print(self.simulation_prices)
 
 
 
@@ -263,37 +232,14 @@ class MonteCarlo:
   │ Run                                                                                                              │
   └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 """
-data =  yf.download("AMZN", start="2019-01-01", end="2022-12-25")
+TICKER = 'UNH'
+START_DATE = "2019-12-25"
+END_DATE = "2022-12-25"
+data =  yf.download(TICKER, start=START_DATE, end=END_DATE, progress = False)
 dist = NormalDistribution(data = data, col = 'Adj Close')
 print(dist)
 
 mc = MonteCarlo()
 mc.random_walk(dist = dist)
 mc.plot(dist = dist)
-
-
-""" 
-  ┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
-  │ Etc.                                                                                                             │
-  └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
-"""
-
-
-# print data examples
-# tmp_data = dist.data[dist.col].to_frame().reset_index().tail()
-# tmp_data.Date = tmp_data.Date.apply(lambda x : x.strftime('%Y-%m-%d'))
-# tmp_data['Adj Close'] = tmp_data['Adj Close'].round(2)
-
-
-
-# daily_return_percentages = np.random.normal(dist.cagr/dist.number_of_trading_days, dist.std_dev/math.sqrt(dist.number_of_trading_days), dist.number_of_trading_days)+1
-# print(daily_return_percentages)
-# print(dist.cagr/dist.number_of_trading_days + 1)
-# print(daily_return_percentages.mean())
-# print(dist.std_dev/math.sqrt(dist.number_of_trading_days))
-# print(daily_return_percentages.std())
-# print(pd.DataFrame(mc.simulation_prices[-1]))
-
-
-
 
