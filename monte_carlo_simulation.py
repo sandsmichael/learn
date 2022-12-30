@@ -232,7 +232,7 @@ class MonteCarlo:
   │ Run                                                                                                              │
   └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 """
-TICKER = 'UNH'
+TICKER = 'SPY'
 START_DATE = "2019-12-25"
 END_DATE = "2022-12-25"
 data =  yf.download(TICKER, start=START_DATE, end=END_DATE, progress = False)
